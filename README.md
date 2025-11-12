@@ -154,6 +154,21 @@ Cloud Run ではデフォルトで `PORT` 環境変数が 8080 に設定され�
    - `final_categories_embeddings.jsonl` をローカルで確認し、Cloud Run へデプロイするディレクトリに配置。
    - 辞書やカテゴリーファイルが更新された場合は GitHub にコミット（大容量の `.jsonl` はコミットしない）。
 
+#### Gemini 辞書候補の再取得
+大量バッチを走らせると、Gemini API のタイムアウトで `dictionary/candidates_full` に `*.error.log` が残る場合があります。以下のスクリプトで自動再試行できます。
+
+```bash
+export GEMINI_API_KEY=...
+python retry_failed_batches.py \
+  --input final_categories.json \
+  --candidates-dir dictionary/candidates_full \
+  --sleep 0.8
+```
+
+- `batch_XXXX_YYYY.error.log` を順番に処理し、成功したものはログを削除します。
+- 引数は `generate_dictionary_candidates.py` とほぼ同じで、必要に応じて `--model` や `--api-version` などを指定できます。
+- 既に `batch_XXXX_YYYY.json` が存在する場合は自動的にスキップします。
+
 ### GitHub とデプロイの使い分け
 - GitHub は **コードと設定ファイルのみ** を管理します。大容量の埋め込みファイルや一時的な候補ファイルはリポジトリに含めないでください。
 - デプロイ（Cloud Run）や再学習はローカル環境から行い、その際に必要なファイルをプロジェクト直下へコピーしてからビルド／デプロイします。
