@@ -214,6 +214,17 @@ Cloud Run ではデフォルトで `PORT` 環境変数が 8080 に設定され�
 ### システム概要ドキュメント
 - 詳細な処理の流れやアルゴリズムの背景については、`docs/system_overview.md` を参照してください。
 
+### テスト用サンプルリクエスト
+- 先頭のブランドカテゴリ（約 3 万件）にマッチしやすいサンプル文を `samples/sample_query_brand.txt` に用意しています。
+- ローカルで動作確認する場合は、次のコマンドでテキスト内容をそのまま送信できます。
+  ```bash
+  SERVICE_URL=http://127.0.0.1:8001  # ローカル docker-compose 実行時
+  curl -X POST "${SERVICE_URL}/search" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg txt "$(cat samples/sample_query_brand.txt)" '{query: $txt, top_k: 5}')"
+  ```
+- Cloud Run 環境で試す場合は `SERVICE_URL` を本番の URL に置き換えてください。
+
 ## 主要ファイルの役割
 
 | ファイル | 用途 | いつ必要か | 備考 |
