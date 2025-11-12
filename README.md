@@ -1,5 +1,18 @@
 # Categorizer Pipeline
 
+## 目次
+- [Categorizer Pipeline](#categorizer-pipeline)
+  - [必要ファイル](#必要ファイル)
+  - [Docker での利用](#docker-での利用)
+    - [docker-compose でのローカル実行](#docker-compose-でのローカル実行)
+    - [Cloud Run へのデプロイ例](#cloud-run-へのデプロイ例)
+  - [運用ガイド](#運用ガイド)
+    - [大容量ファイル (`final_categories_embeddings.jsonl`) について](#大容量ファイル-final_categories_embeddingsjsonl-について)
+    - [カテゴリーの追加・削除フロー](#カテゴリーの追加・削除フロー)
+    - [GitHub とデプロイの使い分け](#github-とデプロイの使い分け)
+    - [Cloud Run デプロイ時の注意](#cloud-run-デプロイ時の注意)
+    - [本番環境リクエスト例](#本番環境リクエスト例)
+
 このプロジェクトは、`categories` ファイルを入力として以下の処理を実行できるように構成されています。
 
 1. **final_categories.txt の生成**  
@@ -166,4 +179,34 @@ Cloud Run ではデフォルトで `PORT` 環境変数が 8080 に設定され�
   ```
 - 認証不要の公開アクセスが必要な場合は、デプロイ後に `gcloud run services add-iam-policy-binding` で `allUsers` に `roles/run.invoker` を付与してください。
 - ヘルスチェックは `/`（エイリアスで `/health`・`/ping`）で応答します。`/healthz` はクラウド側で 404 になるため使用しないでください。
+
+### 本番環境リクエスト例
+`SERVICE_URL` には Cloud Run デプロイ後に表示された URL（例: `https://categorizer-api-xxxxxxxxxx.asia-northeast1.run.app`）を指定してください。
+
+- **ヘルスチェック**
+  ```bash
+  curl -s "${SERVICE_URL}/"
+  ```
+
+- **検索 API（Gemini Embedding を利用）**
+  ```bash
+  curl -X POST "${SERVICE_URL}/search" \
+    -H "Content-Type: application/json" \
+    -d '{
+          "query": "DENIM DUNGAREEと書かれたズボン",
+          "top_k": 5,
+          "attributes": ["entity", "item", "target"]
+        }'
+  ```
+
+- **埋め込みを直接指定して検索する場合**
+  ```bash
+  curl -X POST "${SERVICE_URL}/search" \
+    -H "Content-Type: application/json" \
+    -d '{
+          "embedding": [0.1, 0.2, 0.3, ...],
+          "top_k": 10
+        }'
+  ```
+  ※ `embedding` には Gemini などで生成したベクトルを挿入してください。
 
