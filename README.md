@@ -99,3 +99,71 @@ docker-compose up --build api
 
 Cloud Run ではデフォルトで `PORT` 環境変数が 8080 に設定されます。本プロジェクトの Docker イメージは `PORT` を参照して `uvicorn` を起動するため、追加設定は不要です。
 
+## 運用ガイド
+
+### 大容量ファイル (`final_categories_embeddings.jsonl`) について
+- 既存の埋め込みファイルは **約 480MB** あり、リポジトリには含めていません（`.gitignore` 済み）。
+- 引き継ぎ時は前任者から最新の `final_categories_embeddings.jsonl` を受け取り、プロジェクト直下に配置してください。
+- 共有用には Cloud Storage など外部ストレージで管理することを推奨します。Cloud Run へデプロイする際は、ローカルワークスペースにファイルを置いた状態で `gcloud builds submit` を実行してください（Cloud Build が tarball に含めてアップロードします）。
+
+### カテゴリーの追加・削除フロー
+1. **カテゴリーファイルを準備**
+   - `categories` ファイルを最新化する（削除・追加を反映）。
+2. **最終カテゴリ一覧の再生成**
+   ```bash
+   python transform_categories.py --input categories --output final_categories.txt
+   ```
+3. **JSON 正規化**
+   ```bash
+   python categories_to_json.py --input final_categories.txt --output final_categories.json
+   ```
+4. **辞書の更新（必要に応じて）**
+   ```bash
+   # Gemini から候補を取得
+   export GEMINI_API_KEY=...
+   python generate_dictionary_candidates.py --input final_categories.json --output-dir dictionary/candidates_full
+
+   # 候補を辞書にマージ
+   python process_dictionary_candidates.py --candidates-dir dictionary/candidates_full --apply
+   ```
+   - 既存の辞書に不要な項目があれば手動で削除してから `--apply` で上書きします。
+5. **埋め込みの再生成**
+   ```bash
+   export GEMINI_API_KEY=...
+   python gemini_attribute_embeddings.py \
+     --input final_categories.json \
+     --output final_categories_embeddings.jsonl \
+     --attributes entity item target \
+     --batch-size 16 --sleep 0.6
+   ```
+6. **最終確認**
+   - `final_categories_embeddings.jsonl` をローカルで確認し、Cloud Run へデプロイするディレクトリに配置。
+   - 辞書やカテゴリーファイルが更新された場合は GitHub にコミット（大容量の `.jsonl` はコミットしない）。
+
+### GitHub とデプロイの使い分け
+- GitHub は **コードと設定ファイルのみ** を管理します。大容量の埋め込みファイルや一時的な候補ファイルはリポジトリに含めないでください。
+- デプロイ（Cloud Run）や再学習はローカル環境から行い、その際に必要なファイルをプロジェクト直下へコピーしてからビルド／デプロイします。
+- 定期的に `git status` で未追跡ファイルを確認し、不要ものがあれば削除してください。
+
+### Cloud Run デプロイ時の注意
+- `final_categories_embeddings.jsonl` をプロジェクト直下に置いた状態で、以下の手順を実行します。
+  ```bash
+  PROJECT_ID=...  # 対象プロジェクト
+  REGION=asia-northeast1
+  IMAGE_NAME=categorizer-api
+
+  gcloud builds submit --project "$PROJECT_ID" --tag "asia-northeast1-docker.pkg.dev/$PROJECT_ID/categorizer/$IMAGE_NAME:latest" .
+
+  gcloud run deploy categorizer-api \
+    --project "$PROJECT_ID" \
+    --image "asia-northeast1-docker.pkg.dev/$PROJECT_ID/categorizer/$IMAGE_NAME:latest" \
+    --region "$REGION" \
+    --allow-unauthenticated \
+    --memory 2Gi --cpu 2 --execution-environment gen2 --timeout 600 \
+    --set-env-vars "GEMINI_API_KEY=..." \
+    --set-env-vars "EMBEDDINGS_PATH=/app/final_categories_embeddings.jsonl" \
+    --set-env-vars "CATEGORIES_PATH=/app/final_categories.json"
+  ```
+- 認証不要の公開アクセスが必要な場合は、デプロイ後に `gcloud run services add-iam-policy-binding` で `allUsers` に `roles/run.invoker` を付与してください。
+- ヘルスチェックは `/`（エイリアスで `/health`・`/ping`）で応答します。`/healthz` はクラウド側で 404 になるため使用しないでください。
+
