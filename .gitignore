@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment / tooling
+.env
+.env.*
+.venv/
+venv/
+.python-version
+.idea/
+.vscode/
+.DS_Store
+
+# Build / cache artifacts
+*.log
+*.tmp
+*.swp
+
+# Generated data / large artifacts
+final_categories_embeddings.jsonl
+dictionary/candidates/
+dictionary/candidates_full/
+dictionary/*.log

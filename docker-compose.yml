@@ -1,0 +1,17 @@
+version: "3.11"
+
+services:
+  api:
+    build: .
+    container_name: categorizer-api
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-models/text-embedding-004}
+      GEMINI_API_VERSION: ${GEMINI_API_VERSION:-v1beta}
+      GEMINI_TIMEOUT: ${GEMINI_TIMEOUT:-60}
+      EMBEDDINGS_PATH: ${EMBEDDINGS_PATH:-/app/final_categories_embeddings.jsonl}
+      CATEGORIES_PATH: ${CATEGORIES_PATH:-/app/final_categories.json}
+    volumes:
+      - ./:/app
+    ports:
+      - "8001:8080"

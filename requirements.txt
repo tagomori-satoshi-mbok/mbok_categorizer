@@ -1,0 +1,4 @@
+requests>=2.31.0
+fastapi>=0.115.4
+uvicorn[standard]>=0.30.5
+numpy>=1.26.4
