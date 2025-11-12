@@ -210,3 +210,19 @@ Cloud Run ではデフォルトで `PORT` 環境変数が 8080 に設定され�
   ```
   ※ `embedding` には Gemini などで生成したベクトルを挿入してください。
 
+## 主要ファイルの役割
+
+| ファイル | 用途 | いつ必要か | 備考 |
+| --- | --- | --- | --- |
+| `categories` | 元データ（タブ区切り）。カテゴリ ID や親子関係が含まれる | 新しいカテゴリデータを受け取ったらここを更新 | 中間ノードを含む生データ。通常は外部から共有される |
+| `final_categories.txt` | 最終（葉）カテゴリのみを抽出し、階層パスを付けた一覧 | `transform_categories.py` 実行時に生成 | 例: `カテゴリID	親カテゴリ > 子カテゴリ > ...`。埋め込みや API の基礎データ |
+| `final_categories.json` | `final_categories.txt` を属性ごとに分解した JSON 配列 | `categories_to_json.py` 実行時に生成 | 各レコードが `category_id`・`entity`・`item` などを持つ。API や辞書更新、埋め込み生成で使用 |
+| `dictionary/*.json` | クレンジングに使う辞書（対象キーワード、サイズ語など） | 辞書の更新・クレンジング時 | `process_dictionary_candidates.py` で更新。検索結果の質を高めるために利用 |
+| `final_categories_embeddings.jsonl` | 各カテゴリ属性をベクトル化した JSON Lines | `gemini_attribute_embeddings.py` 実行時に生成 | 1 行 = 1 カテゴリ × 属性の埋め込み。API 起動時にロードして類似度検索に使用。約 480MB と大容量 |
+
+初心者向け補足:
+- `categories` は「元帳」。ここを最新化すると他のファイルも再生成する必要があります。
+- `final_categories.txt` は「末端カテゴリのみの一覧」。埋め込みや API で扱いやすい形に整えた中間成果物です。
+- `final_categories.json` は「カテゴリ属性が展開された辞書」。API や辞書作成、埋め込み生成で中心的な役割を担っています。
+- `final_categories_embeddings.jsonl` は「Gemini でベクトル化した最終成果物」。API が高速に検索するための必須データです（Gitには含めず、外部共有やローカル保管を前提としてください）。
+
