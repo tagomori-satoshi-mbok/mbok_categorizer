@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
@@ -225,6 +227,44 @@ class EmbeddingIndex:
         return CategoryInfo.model_validate(data)
 
 
+def _normalize(value: str) -> str:
+    return unicodedata.normalize("NFKC", value or "").lower()
+
+
+def _extract_tokens(text: str) -> set[str]:
+    normalized = _normalize(text)
+    if not normalized:
+        return set()
+    tokens = re.split(r"[\s>/＞／・、。,\-]+", normalized)
+    return {token for token in tokens if token}
+
+
+def _keyword_bonus(query: str, category: CategoryInfo) -> float:
+    query_tokens = _extract_tokens(query)
+    if not query_tokens:
+        return 0.0
+
+    candidate_fields = [
+        category.item,
+        category.subcategory,
+        category.category_group,
+        category.raw_path,
+    ]
+
+    bonus = 0.0
+    matched_tokens: set[str] = set()
+    for field in candidate_fields:
+        if not field:
+            continue
+        field_tokens = _extract_tokens(field)
+        matches = query_tokens & field_tokens
+        if matches:
+            matched_tokens.update(matches)
+    if matched_tokens:
+        bonus += 0.05 * min(len(matched_tokens), 4)
+    return bonus
+
+
 class GeminiEmbeddingClient:
     def __init__(self, *, api_key: str, api_version: str, model: str, timeout: float = 60.0):
         self.api_key = api_key
@@ -266,6 +306,13 @@ class GeminiEmbeddingClient:
         if not vector:
             raise RuntimeError(f"embedding not found in response: {data}")
         return np.asarray(vector, dtype=np.float32)
+
+
+ATTRIBUTE_WEIGHTS: Dict[str, float] = {
+    "item": 1.3,
+    "target": 1.05,
+    "entity": 0.9,
+}
 
 
 def _setup_cors(app: FastAPI) -> None:
@@ -378,25 +425,36 @@ def search_endpoint(
             ) from exc
 
     try:
-        hits = index.search(query_vector, attributes, request.top_k)
+        hits = index.search(query_vector, attributes, max(request.top_k * 3, request.top_k))
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
 
-    results: List[SearchResult] = []
+    aggregated: Dict[str, SearchResult] = {}
+    query_text = request.query or ""
     for hit in hits:
         category = index.get_category(hit["category_id"])
-        results.append(
-            SearchResult(
-                category_id=hit["category_id"],
-                attribute=hit["attribute"],
-                score=hit["score"],
-                text=hit["text"],
-                category=category,
-            )
+        weight = ATTRIBUTE_WEIGHTS.get(hit["attribute"], 1.0)
+        base_score = hit["score"] * weight
+        bonus = _keyword_bonus(query_text, category)
+        final_score = base_score + bonus
+
+        existing = aggregated.get(hit["category_id"])
+        if existing and existing.score >= final_score:
+            continue
+
+        aggregated[hit["category_id"]] = SearchResult(
+            category_id=hit["category_id"],
+            attribute=hit["attribute"],
+            score=final_score,
+            text=hit["text"],
+            category=category,
         )
+
+    deduped_results = sorted(aggregated.values(), key=lambda item: item.score, reverse=True)
+    results = deduped_results[: request.top_k]
 
     attribute_counts = Counter(hit.attribute for hit in results)
     meta = SearchMetadata(
