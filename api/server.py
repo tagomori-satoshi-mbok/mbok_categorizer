@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import numpy as np
 import requests
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, RootModel
 
 
@@ -267,7 +268,26 @@ class GeminiEmbeddingClient:
         return np.asarray(vector, dtype=np.float32)
 
 
+def _setup_cors(app: FastAPI) -> None:
+    env_value = os.environ.get("CORS_ALLOW_ORIGINS", "")
+    if env_value.strip() == "*":
+        allow_origins = ["*"]
+    elif env_value.strip():
+        allow_origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
+    else:
+        allow_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
 app = FastAPI(title="Categorizer API", version="0.1.0")
+_setup_cors(app)
 
 
 @lru_cache()

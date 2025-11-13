@@ -195,6 +195,7 @@ python retry_failed_batches.py \
   ```
 - 認証不要の公開アクセスが必要な場合は、デプロイ後に `gcloud run services add-iam-policy-binding` で `allUsers` に `roles/run.invoker` を付与してください。
 - ヘルスチェックは `/`（エイリアスで `/health`・`/ping`）で応答します。`/healthz` はクラウド側で 404 になるため使用しないでください。
+- CORS はデフォルトで `http://localhost:3000` と `http://127.0.0.1:3000` を許可しています。必要に応じて環境変数 `CORS_ALLOW_ORIGINS` にカンマ区切りでオリジンを指定してください（`*` で全許可）。
 
 ### 本番環境リクエスト例
 `SERVICE_URL` には Cloud Run デプロイ後に表示された URL（例: `https://categorizer-api-xxxxxxxxxx.asia-northeast1.run.app`）を指定してください。
