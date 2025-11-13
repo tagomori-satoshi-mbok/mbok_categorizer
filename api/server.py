@@ -275,7 +275,11 @@ def _setup_cors(app: FastAPI) -> None:
     elif env_value.strip():
         allow_origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
     else:
-        allow_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+        allow_origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "https://mbok-gemini-frontend-qyhd7jx6ca-an.a.run.app",
+        ]
 
     app.add_middleware(
         CORSMiddleware,
